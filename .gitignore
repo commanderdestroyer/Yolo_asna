@@ -4,6 +4,7 @@ __pycache__/
 *.onnx
 .env/
 venv/
+**/.env
 
 node_modules/
 dist/

@@ -1,8 +1,9 @@
-import time
 import io
+import json
 import os
 import subprocess
 import tempfile
+import time
 
 import cv2
 from PIL import Image, UnidentifiedImageError
@@ -13,7 +14,31 @@ from fastapi.middleware.cors import CORSMiddleware
 
 
 # ============================================================
-# 1. FASTAPI APPLICATION
+# 1. CONFIGURATION
+# ============================================================
+
+MODEL_NAME = os.getenv("MODEL_NAME", "yolov8n.pt")
+
+MAX_FILE_SIZE = int(
+    os.getenv("MAX_FILE_SIZE", 10 * 1024 * 1024)
+)
+
+DEFAULT_CONFIDENCE = float(
+    os.getenv("DEFAULT_CONFIDENCE", 0.5)
+)
+
+ALLOWED_IMAGE_TYPES = {
+    "image/jpeg",
+    "image/png",
+}
+
+ALLOWED_VIDEO_TYPES = {
+    "video/mp4",
+}
+
+
+# ============================================================
+# 2. FASTAPI APPLICATION
 # ============================================================
 
 app = FastAPI(
@@ -23,7 +48,7 @@ app = FastAPI(
 
 
 # ============================================================
-# 2. CORS
+# 3. CORS
 # ============================================================
 
 app.add_middleware(
@@ -37,31 +62,23 @@ app.add_middleware(
 
 
 # ============================================================
-# 3. YOLO MODEL
+# 4. YOLO MODEL
 # ============================================================
 
-model = YOLO("yolov8n.pt")
-
-
-# ============================================================
-# 4. CONFIGURATION
-# ============================================================
-
-MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
-
-ALLOWED_IMAGE_TYPES = {
-    "image/jpeg",
-    "image/png",
-}
-
-ALLOWED_VIDEO_TYPES = {
-    "video/mp4",
-}
+model = YOLO(MODEL_NAME)
 
 
 # ============================================================
 # 5. HEALTH CHECK
 # ============================================================
+
+@app.get("/health")
+def health():
+    return {
+        "status": "healthy",
+        "model": MODEL_NAME,
+    }
+
 
 @app.get("/")
 def home():
@@ -74,18 +91,24 @@ def home():
 # ============================================================
 # 6. PREDICTION ENDPOINT
 # ============================================================
+
 @app.post("/predict")
 async def predict(
     file: UploadFile = File(...),
-    confidence: float = Form(0.5),
+    confidence: float = Form(DEFAULT_CONFIDENCE),
 ):
+    # --------------------------------------------------------
+    # 6.1. VALIDATE CONFIDENCE
+    # --------------------------------------------------------
+
     if confidence < 0 or confidence > 1:
         raise HTTPException(
             status_code=400,
             detail="Confidence must be between 0 and 1.",
         )
+
     # --------------------------------------------------------
-    # 6.1. CHECK FILE TYPE
+    # 6.2. CHECK FILE TYPE
     # --------------------------------------------------------
 
     content_type = file.content_type
@@ -100,21 +123,24 @@ async def predict(
         )
 
     # --------------------------------------------------------
-    # 6.2. READ UPLOADED FILE
+    # 6.3. READ UPLOADED FILE
     # --------------------------------------------------------
 
     file_bytes = await file.read()
 
-    # --------------------------------------------------------
-    # 6.3. CHECK FILE SIZE
-    # --------------------------------------------------------
-
     start_time = time.perf_counter()
+
+    # --------------------------------------------------------
+    # 6.4. CHECK FILE SIZE
+    # --------------------------------------------------------
 
     if len(file_bytes) > MAX_FILE_SIZE:
         raise HTTPException(
             status_code=400,
-            detail="File size must not exceed 10 MB.",
+            detail=(
+                f"File size must not exceed "
+                f"{MAX_FILE_SIZE / (1024 * 1024):.0f} MB."
+            ),
         )
 
     # ========================================================
@@ -145,10 +171,16 @@ async def predict(
         # 7.2. YOLO DETECTION
         # ----------------------------------------------------
 
-        results = model(
-            image,
-            conf=confidence,
-        )
+        try:
+            results = model(
+                image,
+                conf=confidence,
+            )
+        except Exception:
+            raise HTTPException(
+                status_code=500,
+                detail="YOLO inference failed.",
+            )
 
         result = results[0]
 
@@ -202,17 +234,14 @@ async def predict(
         )
 
         # ----------------------------------------------------
-        # 7.6. RETURN IMAGE + DETECTION METADATA
+        # 7.6. PROCESSING TIME
         # ----------------------------------------------------
 
-        # NOTE:
-        # We cannot return the JPEG and JSON metadata
-        # directly as a normal JSON response at the same time.
-        #
-        # Therefore, for this step we will temporarily
-        # return the metadata through HTTP headers.
+        processing_time = time.perf_counter() - start_time
 
-        import json
+        # ----------------------------------------------------
+        # 7.7. RETURN IMAGE + METADATA
+        # ----------------------------------------------------
 
         detection_data = json.dumps(
             {
@@ -222,8 +251,6 @@ async def predict(
             }
         )
 
-        processing_time = time.perf_counter() - start_time
-
         return Response(
             content=image_buffer.getvalue(),
             media_type="image/jpeg",
@@ -231,6 +258,7 @@ async def predict(
                 "X-Detection-Data": detection_data,
             },
         )
+
     # ========================================================
     # 8. VIDEO PROCESSING
     # ========================================================
@@ -335,16 +363,16 @@ async def predict(
                 )
 
             # ------------------------------------------------
-            # 8.7. PROCESS EACH FRAME WITH YOLO
-            # ------------------------------------------------
-
-                        # ------------------------------------------------
-            # 8.7.1. DETECTION STATISTICS
+            # 8.7. DETECTION STATISTICS
             # ------------------------------------------------
 
             frame_count = 0
             total_objects = 0
             class_counts = {}
+
+            # ------------------------------------------------
+            # 8.8. PROCESS EACH FRAME WITH YOLO
+            # ------------------------------------------------
 
             while True:
 
@@ -387,8 +415,9 @@ async def predict(
                 annotated_frame = result.plot()
 
                 writer.write(annotated_frame)
+
             # ------------------------------------------------
-            # 8.8. RELEASE OPENCV RESOURCES
+            # 8.9. RELEASE OPENCV RESOURCES
             # ------------------------------------------------
 
             cap.release()
@@ -398,7 +427,7 @@ async def predict(
             writer = None
 
             # ------------------------------------------------
-            # 8.9. CONVERT VIDEO TO H.264 USING FFMPEG
+            # 8.10. CONVERT VIDEO TO H.264 USING FFMPEG
             # ------------------------------------------------
 
             ffmpeg_command = [
@@ -423,7 +452,7 @@ async def predict(
             )
 
             # ------------------------------------------------
-            # 8.10. READ PROCESSED VIDEO
+            # 8.11. READ PROCESSED VIDEO
             # ------------------------------------------------
 
             with open(
@@ -434,13 +463,15 @@ async def predict(
                 result_video = video_file.read()
 
             # ------------------------------------------------
-            # 8.11. RETURN VIDEO + DETECTION METADATA
+            # 8.12. PROCESSING TIME
             # ------------------------------------------------
 
-            import json
-
             processing_time = time.perf_counter() - start_time
-            
+
+            # ------------------------------------------------
+            # 8.13. RETURN VIDEO + METADATA
+            # ------------------------------------------------
+
             detection_data = json.dumps(
                 {
                     "frames": frame_count,
@@ -511,4 +542,3 @@ async def predict(
 
                     except OSError:
                         pass
-

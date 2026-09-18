@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const API_URL = import.meta.env.VITE_API_URL || "/api";
 
 const IMAGE_MAX_SIZE = 10 * 1024 * 1024; // 10 MB
-const VIDEO_MAX_SIZE = 10 * 1024 * 1024; // 20 MB
+const VIDEO_MAX_SIZE = 10 * 1024 * 1024; // 10 MB
 
 const IMAGE_TYPES = [
   "image/jpeg",
@@ -77,9 +77,11 @@ function App() {
       setFile(null);
       setPreviewUrl(null);
       setMode(null);
+
       setError(
         "Unsupported file type. Please select JPG, JPEG, PNG, or MP4."
       );
+
       return;
     }
 
@@ -90,7 +92,11 @@ function App() {
       setFile(null);
       setPreviewUrl(null);
       setMode(null);
-      setError("Image file is too large. Maximum size is 10 MB.");
+
+      setError(
+        "Image file is too large. Maximum size is 10 MB."
+      );
+
       return;
     }
 
@@ -98,7 +104,11 @@ function App() {
       setFile(null);
       setPreviewUrl(null);
       setMode(null);
-      setError("Video file is too large. Maximum size is 20 MB.");
+
+      setError(
+        "Video file is too large. Maximum size is 10 MB."
+      );
+
       return;
     }
 
@@ -144,18 +154,28 @@ function App() {
       formData.append("file", file);
       formData.append("confidence", confidence);
 
-      formData.append("file", file);
-
-      const response = await fetch(`${API_URL}/predict`, {
-        method: "POST",
-        body: formData,
-      });
+      /*
+       * Browser calls:
+       *
+       * /api/predict
+       *
+       * NGINX will forward this request
+       * to the backend container.
+       */
+      const response = await fetch(
+        `${API_URL}/predict`,
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
 
       /*
-      * Handle HTTP errors
-      */
+       * Handle HTTP errors
+       */
       if (!response.ok) {
-        let errorMessage = `Request failed with status ${response.status}.`;
+        let errorMessage =
+          `Request failed with status ${response.status}.`;
 
         try {
           const errorData = await response.json();
@@ -171,60 +191,65 @@ function App() {
       }
 
       /*
-      * Backend returns raw binary data:
-      *
-      * Image -> image/jpeg
-      * Video -> video/mp4
-      *
-      * Therefore we MUST use response.blob().
-      */
-    const resultBlob = await response.blob();
+       * Backend returns raw binary data:
+       *
+       * Image -> image/jpeg
+       * Video -> video/mp4
+       *
+       * Therefore we MUST use response.blob().
+       */
+      const resultBlob = await response.blob();
 
-    const resultObjectUrl = URL.createObjectURL(resultBlob);
+      const resultObjectUrl = URL.createObjectURL(
+        resultBlob
+      );
 
-    setResultUrl(resultObjectUrl);
+      setResultUrl(resultObjectUrl);
 
-    /*
-    * Read detection metadata from HTTP header
-    */
-    const detectionHeader = response.headers.get(
-      "X-Detection-Data"
-    );
+      /*
+       * Read detection metadata from HTTP header
+       */
+      const detectionHeader =
+        response.headers.get("X-Detection-Data");
 
-    let detectionData = null;
+      let detectionData = null;
 
-    if (detectionHeader) {
-      try {
-        detectionData = JSON.parse(detectionHeader);
-      } catch {
-        console.error(
-          "Failed to parse detection metadata."
-        );
+      if (detectionHeader) {
+        try {
+          detectionData = JSON.parse(
+            detectionHeader
+          );
+        } catch {
+          console.error(
+            "Failed to parse detection metadata."
+          );
+        }
       }
-    }
 
-    /*
-    * Save result information
-    */
-    setResult({
-      message:
-        mode === "image"
-          ? "Image processed successfully."
-          : "Video processed successfully.",
-      
-      processing_time: detectionData?.processing_time,
+      /*
+       * Save result information
+       */
+      setResult({
+        message:
+          mode === "image"
+            ? "Image processed successfully."
+            : "Video processed successfully.",
 
-      count: detectionData?.count ?? 0, // tong so detection qua tat ca cac frame, khong fai so object trong video
+        processing_time:
+          detectionData?.processing_time,
 
-      detections:
-        detectionData?.detections ?? [],
+        count:
+          detectionData?.count ?? 0,
 
-      frames:
-        detectionData?.frames,
+        detections:
+          detectionData?.detections ?? [],
 
-      counts:
-        detectionData?.counts,
-    });
+        frames:
+          detectionData?.frames,
+
+        counts:
+          detectionData?.counts,
+      });
 
     } catch (err) {
       setError(
@@ -274,6 +299,7 @@ function App() {
 
           <label className="file-label">
             Select image or video
+
             <input
               type="file"
               accept=".jpg,.jpeg,.png,.mp4,image/jpeg,image/png,video/mp4"
@@ -348,7 +374,9 @@ function App() {
             step="0.05"
             value={confidence}
             onChange={(event) =>
-              setConfidence(Number(event.target.value))
+              setConfidence(
+                Number(event.target.value)
+              )
             }
           />
 
@@ -538,19 +566,16 @@ function App() {
 
 /*
  * Convert backend relative URL into absolute URL.
- *
- * Example:
- * /outputs/result.mp4
- *
- * becomes:
- * http://localhost:8000/outputs/result.mp4
  */
 function makeAbsoluteUrl(url) {
   if (!url) {
     return null;
   }
 
-  if (url.startsWith("http://") || url.startsWith("https://")) {
+  if (
+    url.startsWith("http://") ||
+    url.startsWith("https://")
+  ) {
     return url;
   }
 

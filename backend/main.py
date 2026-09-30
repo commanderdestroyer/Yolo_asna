@@ -78,6 +78,8 @@ def health():
         "status": "healthy",
         "model": MODEL_NAME,
     }
+# ko dc de nhu nay them 1 cai ham/anh de test luon
+# tai sao phai co anh/ham nhu vay nhi ??
 
 
 @app.get("/")

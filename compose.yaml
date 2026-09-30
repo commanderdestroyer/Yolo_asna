@@ -35,17 +35,56 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
 
+    volumes:
+      - frontend-dist:/app/dist  
+    
+    restart: "no" 
+    # frontend container bay gio khong con la webserver nua
+    # vi vay, container sau khi build xong thi co the thoat
+
+
+    networks:
+      - yolo-network
+
+
+  nginx:
+    image: nginx:alpine
+
     ports:
       - "8080:80"
+
+    volumes:
+      - frontend-dist:/usr/share/nginx/html:ro
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # NGINX se doc volum frontend/dists nay
+      # ro la read-only, NGINX chi read, ko fix
+
 
     restart: unless-stopped
 
     depends_on:
       backend:
-        condition: service_healthy # doi bao gio backend tra loi healthy thi moi chay frontend
+        condition: service_healthy
+      frontend:
+        condition: service_completed_successfully
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget --no-verbose --tries=1 --spider http://127.0.0.1/ || exit 1"
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
     networks:
       - yolo-network
+
+
+volumes:
+  frontend-dist:
 
 
 networks:

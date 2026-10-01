@@ -1,0 +1,27 @@
+name: CI
+
+on:
+# determine xem khi nao workflow dc activate 
+  push:
+    branches:
+      - main
+# khi co commit dc push vao main thi chay CI
+
+  pull_request:
+    branches:
+      - main
+# khi co pull request vao main thi chay CI
+
+jobs:
+  test:
+  # name of job
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        # pull code from code repo vao Ubuntu runner
+
+      - name: Run basic check
+        run: echo "CI is working!"
+        # run shell command tren runner

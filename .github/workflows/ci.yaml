@@ -45,7 +45,21 @@ jobs:
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
+      # read packagejson and packagelockjson va tai dependencies ve
+
 
       - name: Build frontend
         working-directory: frontend
         run: npm run build
+
+
+
+  docker:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build Docker images
+        run: docker compose build

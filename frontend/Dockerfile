@@ -16,9 +16,7 @@ COPY . .
 # Build Vite application
 RUN npm run build
 
-RUN cp -r /app/dist /app/build-output  
 # absolute path
-
 # mounting volume se che noi dung co san trong image
 # khi build thi dists da nam ben trong image
 # 2 container khong tu dong nhin thay filesystem cua nhau
@@ -26,6 +24,13 @@ RUN cp -r /app/dist /app/build-output
 # frontend ---> frontend-dists(Docker Volume) <--- nginx
 # chinh vi bi che nen ta can create ra 1 ban copy cua dist, la buil-ouput
 # ban copy nay se khong bi mount, dist moi la thang bi mount
+
+
+CMD ["sh", "-c", "find /output -mindepth 1 -maxdepth 1 -exec rm -rf -- {} + && cp -a /app/dist/. /output/"]
+# xoa cac file va sub folder cu trong volume de tranh giu lai nhung asset ko con dc dung sau lan build moi
+
+
+
 
 
 

@@ -150,6 +150,7 @@ function App() {
 
     try {
       const formData = new FormData();
+      // FormData() la function co the tu dong create HTTP Request co body dang miltipart/form-data
 
       formData.append("file", file);
       formData.append("confidence", confidence);

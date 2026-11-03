@@ -19,7 +19,7 @@ COPY requirement.txt .
 
 
 # Install CPU-only PyTorch
-RUN pip install --no-cache-dir \
+RUN pip install --no-cache-dir --timeout 300 --retries 10 \
     torch \
     torchvision \
     --index-url https://download.pytorch.org/whl/cpu
